@@ -1,3 +1,15 @@
+# Files unique to this repo
+.DS_Store
+
+# Folders unique to this repo
+data/
+
+# R Files
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
