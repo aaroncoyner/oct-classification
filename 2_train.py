@@ -50,6 +50,8 @@ def set_device():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     if device == 'cuda':
         torch.cuda.empty_cache()
+    print(f'device: {device}')
+    print()
     return device
 
 
@@ -113,15 +115,6 @@ def train(train_data, val_data, random_flips=True, weight_samples=True, stop_ear
     device = set_device()
     sampler = configure_sampler(weight_samples)
     callbacks = configure_callbacks(stop_early, output_dir)
-    print()
-    print(f'Number of classes: {num_classes}')
-    print(f'Number of workers: {num_workers}')
-    print(f'Image size: {image_size}')
-    print(f'Number of epochs: {num_epochs}')
-    print(f'Learning rate: {lr}')
-    print(f'Batch size: {batch_size}')
-    print(f'Device: {device}')
-    print()
     print('Training...')
     net = NeuralNetClassifier(PretrainedModel,
                               criterion=nn.CrossEntropyLoss,
@@ -179,6 +172,9 @@ def parse_args():
 if __name__ == '__main__':
     torch.multiprocessing.set_sharing_strategy('file_system')
     args = parse_args()
+    print()
+    for arg in vars(args):
+        print(f'{arg}: {getattr(args, arg)}')
     image_size = (args.image_size,args.image_size)
     train_data, val_data, test_data = prepare_data(input_dir=args.input_dir,
                                                    random_flips=args.random_flips,
