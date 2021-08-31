@@ -55,7 +55,8 @@ def set_device():
     return device
 
 
-def prepare_data(input_dir, random_flips, image_size=(224,224)):
+def prepare_data(args):
+    image_size = (args.image_size,args.image_size)
     train_transforms = transforms.Compose([transforms.Resize(image_size),
                                            transforms.RandomHorizontalFlip(),
                                            transforms.RandomVerticalFlip(),
@@ -65,12 +66,12 @@ def prepare_data(input_dir, random_flips, image_size=(224,224)):
     test_transforms = transforms.Compose([transforms.Resize(image_size),
                                           transforms.ToTensor(),
                                           transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])])
-    if random_flips:
-        train_data = OCTDataset(os.path.join(input_dir, 'training.csv'), train_transforms)
+    if args.random_flips:
+        train_data = OCTDataset(os.path.join(args.input_dir, 'training.csv'), train_transforms)
     else:
-        train_data = OCTDataset(os.path.join(input_dir, 'training.csv'), test_transforms)
-    val_data = OCTDataset(os.path.join(input_dir, 'validation.csv'), test_transforms)
-    test_data = OCTDataset(os.path.join(input_dir, 'testing.csv'), test_transforms)
+        train_data = OCTDataset(os.path.join(args.input_dir, 'training.csv'), test_transforms)
+    val_data = OCTDataset(os.path.join(args.input_dir, 'validation.csv'), test_transforms)
+    test_data = OCTDataset(os.path.join(args.input_dir, 'testing.csv'), test_transforms)
     return train_data, val_data, test_data
 
 
@@ -94,7 +95,7 @@ def configure_callbacks(stop_early, output_dir):
     return callbacks
 
 
-def configure_sampler(weight_samples):
+def configure_sampler(train_data, weight_samples):
     if weight_samples:
         labels = train_data.labels
         normal_weight = 1 / len(labels[labels == 0])
@@ -109,25 +110,24 @@ def configure_sampler(weight_samples):
     return sampler
 
 
-def train(train_data, val_data, random_flips=True, weight_samples=True, stop_early=True,
-          output_dir='./', num_classes=4, image_size=(224,224), num_epochs=50, lr=0.001,
-          batch_size=32, num_workers=0):
+def train(train_data, val_data, args):
     device = set_device()
-    sampler = configure_sampler(weight_samples)
-    callbacks = configure_callbacks(stop_early, output_dir)
+    sampler = configure_sampler(train_data, args.weight_samples)
+    callbacks = configure_callbacks(args.stop_early, args.output_dir)
     print('Training...')
     net = NeuralNetClassifier(PretrainedModel,
                               criterion=nn.CrossEntropyLoss,
-                              lr=lr,
-                              batch_size=batch_size,
-                              max_epochs=num_epochs,
-                              module__output_features=num_classes,
+                              lr=args.learning_rate,
+                              batch_size=args.batch_size,
+                              max_epochs=args.num_epochs,
+                              module__output_features=args.num_classes,
                               optimizer=optim.SGD,
                               optimizer__momentum=0.9,
-                              iterator_train__num_workers=num_workers,
+                              iterator_train__num_workers=args.num_workers,
                               iterator_train__sampler=sampler,
+                              iterator_train__shuffle=True if sampler == None else False,
                               iterator_valid__shuffle=False,
-                              iterator_valid__num_workers=num_workers,
+                              iterator_valid__num_workers=args.num_workers,
                               train_split=predefined_split(val_data),
                               callbacks=callbacks,
                               device=device)
@@ -135,7 +135,7 @@ def train(train_data, val_data, random_flips=True, weight_samples=True, stop_ear
     return net
 
 
-def test(net, data, output_dir='./'):
+def test(net, data, args):
     print()
     print('Testing...')
     probs = net.predict_proba(data)
@@ -145,7 +145,7 @@ def test(net, data, output_dir='./'):
                 'DRUSEN': probs[:,1],
                 'CNV': probs[:,2],
                 'DME': probs[:,3]}
-    csv_name = os.path.join(output_dir, 'probability.csv')
+    csv_name = os.path.join(args.output_dir, 'probability.csv')
     pd.DataFrame(data=csv_data).to_csv(csv_name, index=False)
     print(f'Done. Outputs written to: {csv_name}')
     print()
@@ -170,26 +170,14 @@ def parse_args():
 
 
 if __name__ == '__main__':
+
     torch.multiprocessing.set_sharing_strategy('file_system')
+
     args = parse_args()
     print()
     for arg in vars(args):
         print(f'{arg}: {getattr(args, arg)}')
-    image_size = (args.image_size,args.image_size)
-    train_data, val_data, test_data = prepare_data(input_dir=args.input_dir,
-                                                   random_flips=args.random_flips,
-                                                   image_size=image_size)
-    net = train(train_data,
-                val_data,
-                batch_size=args.batch_size,
-                image_size=image_size,
-                lr=args.learning_rate,
-                num_classes=args.num_classes,
-                num_epochs=args.num_epochs,
-                num_workers=args.num_workers,
-                output_dir=args.output_dir,
-                random_flips=args.random_flips,
-                stop_early=args.stop_early,
-                weight_samples=args.weight_samples)
 
-    test(net, test_data, args.output_dir)
+    train_data, val_data, test_data = prepare_data(args)
+    net = train(train_data, val_data, args)
+    test(net, test_data, args)
